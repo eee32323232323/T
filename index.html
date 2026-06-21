@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, orientation=landscape">
+<title>🏢 Трёхэтажное здание - Джойстики</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
+body { overflow: hidden; background: #000; font-family: Arial, sans-serif; width: 100vw; height: 100vh; position: fixed; }
+canvas { display: block; width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; z-index: 1; }
+
+/* Orientation Warning */
+#orientation-warning {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.95);
+  z-index: 200;
+  display: flex;
+  align-items: center; justify-content: center;
+  text-align: center;
+  color: #fff;
+  transition: opacity 0.3s ease;
+}
+#orientation-warning.hidden { opacity: 0; pointer-events: none; }
+.warning-content {
+  padding: 40px;
+  background: rgba(30,30,40,0.95);
+  border-radius: 20px;
+  max-width: 90%;
+  border: 2px solid #6cf;
+}
+.warning-content h2 { font-size: 28px; margin-bottom: 20px; color: #6cf; }
+.warning-content p { font-size: 18px; line-height: 1.6; margin-bottom: 20px; }
+.rotate-icon { font-size: 60px; animation: rotate-phone 2s infinite; }
+@keyframes rotate-phone {
+  0% { transform: rotate(-45deg); }
+  50% { transform: rotate(45deg); }
+  100% { transform: rotate(-45deg); }
+}
+
+/* Crosshair */
+#crosshair {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px; height: 20px; z-index: 50; pointer-events: none;
+}
+#crosshair::before, #crosshair::after {
+  content: ''; position: absolute; background: rgba(255,255,255,0.7);
+}
+#crosshair::before { width: 2px; height: 20px; left: 9px; top: 0; }
+#crosshair::after { width: 20px; height: 2px; top: 9px; left: 0; }
+
+/* Floor Indicator */
+#floor-indicator {
+  position: fixed; top: 10px; left: 10px;
+  color: #fff; font-size: 16px; z-index: 50;
+  background: rgba(0,0,0,0.5); padding: 8px 12px;
+  border-radius: 8px; display: none;
+}
+
+/* Pause Button */
+#pause-btn {
+  position: fixed; top: 10px; right: 80px;
+  background: rgba(100,100,100,0.5);
+  color: #fff; border: none;
+  padding: 10px 14px; border-radius: 8px;
+  font-size: 12px; z-index: 60;
+  backdrop-filter: blur(5px);
+  display: none;
+}
+
+/* Mobile Controls Container */
+#mobile-controls {
+  position: fixed; inset: 0;
+  z-index: 55; pointer-events: none;
+}
+
+/* Joystick Areas */
+.joystick-container {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 20px);
+}
+
+#joystick-move-left {
+  left: calc(env(safe-area-inset-left) + 30px);
+}
+
+#joystick-look-right {
+  right: calc(env(safe-area-inset-right) + 30px);
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 180px;
+  height: 180px;
+}
+
+/* Look Zone (Right side swipe) */
+#look-zone-right {
+  position: fixed; top: 0; right: 0;
+  width: 100%; height: 100%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* Joystick Base */
+.joystick-base {
+  position: relative;
+  width: 120px; height: 120px;
+  background: linear-gradient(145deg, rgba(100,150,255,0.3), rgba(50,100,255,0.2));
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  margin: 20px;
+}
+
+/* Action Buttons Container */
+.action-buttons {
+  position: fixed; bottom: calc(env(safe-area-inset-bottom) + 20px);
+  right: calc(env(safe-area-inset-right) + 30px);
+  display: none;
+  z-index: 55;
+  pointer-events: auto;
+  gap: 16px;
+  flex-direction: row;
+}
+
+.action-btn {
+  width: 70px; height: 70px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(100,200,255,0.3);
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  active: scale(0.95);
+  display: flex; align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+.action-btn .label { font-size: 10px; opacity: 0.8; }
+#jump-btn { background: rgba(255,100,100,0.3); }
+#run-btn.active { background: rgba(255,200,100,0.4); }
+#run-btn.inactive { background: rgba(100,200,255,0.3); }
+
+/* Minimap Container */
+#minimap-container {
+  position: fixed; bottom: calc(env(safe-area-inset-bottom) + 180px);
+  right: calc(env(safe-area-inset-right) + 30px);
+  width: 120px; height: 120px;
+  background: rgba(0,0,0,0.7); border: 2px solid #6cf;
+  border-radius: 8px; z-index: 50;
+  display: none;
+}
+#minimap { width: 100%; height: 100%; }
+
+/* Tablet adjustments */
+@media (min-width: 769px) {
+  #mobile-controls { display: none !important; }
+  #crosshair, #floor-indicator, #minimap-container { display: none; }
+  #orientation-warning { display: none; }
+  #pause-btn { display: block; }
+}
+
+/* Landscape optimization */
+@media (orientation: landscape) and (max-width: 800px) {
+  #joystick-move-left { left: calc(env(safe-area-inset-left) + 50px); }
+  #action-buttons { bottom: calc(env(safe-area-inset-bottom) + 30px); right: calc(env(safe-area-inset-right) + 50px); }
+  #minimap-container { bottom: calc(env(safe-area-inset-bottom) + 200px); right: calc(env(safe-area-inset-right) + 50px); }
+  .joystick-base { width: 110px; height: 110px; margin: 25px; }
+  
+  #joystick-look-right { 
+    width: 160px; 
+    height: 160px; 
+  }
+}
+
+/* Portrait warning on mobile */
+@media (orientation: portrait) and (max-width: 1024px) {
+  #orientation-warning { display: flex; }
+  #pause-btn { display: none; }
+}
+
+@media (orientation: landscape) {
+  #orientation-warning { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Orientation Warning -->
+<div id="orientation-warning">
+  <div class="warning-content">
+    <h2>⚠️ Вращайте устройство</h2>
+    <p>Игра лучше всего работает в горизонтальном режиме<br>(Landscape)</p>
+    <div class="rotate-icon">↻</div>
+  </div>
+</div>
+
+<!-- UI Elements -->
+<div id="crosshair"></div>
+<div id="floor-indicator">Этаж: 1</div>
+<div id="pause-btn">⏸️ Меню</div>
+<div id="minimap-container"></div>
+
+<!-- Mobile Controls -->
+<div id="mobile-controls">
+  <!-- Move Joystick -->
+  <div class="joystick-container" id="joystick-move-left">
+    <div class="joystick-base">
+      <div class="joystick-center-mark"></div>
+      <div class="joystick-stick"></div>
+    </div>
+  </div>
+  
+  <!-- Look Joystick -->
+  <div class="joystick-container" id="joystick-look-right">
+    <div class="joystick-base">
+      <div class="joystick-center-mark"></div>
+      <div class="joystick-stick"></div>
+    </div>
+  </div>
+  
+  <!-- Swipe Area for Camera -->
+  <div id="look-zone-right"></div>
+  
+  <!-- Action Buttons -->
+  <div class="action-buttons">
+    <button id="run-btn" class="action-btn inactive">
+      <span>⚡ Бег</span>
+    </button>
+    <button id="jump-btn" class="action-btn">
+      <span>🦘 Прыжок</span>
+    </button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===== STATE VARIABLES =====
+let gameStarted = false;
+let isPaused = false;
+
+// Movement state
+let moveDirection = new THREE.Vector2();
+let lookDirection = new THREE.Vector2();
+
+// Touch tracking
+let lastLookX = 0, lastLookY = 0;
+let lookActive = false;
+
+// Speed
+let isRunning = false;
+const BASE_SPEED = 4;
+const RUN_SPEED = 8;
+const LOOK_SENSITIVITY = 0.003;
+
+// Joystick radius
+const JOYSTICK_MAX_RADIUS = 35;
+
+// ===== THREE.JS SETUP =====
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(0, 1.7, 8);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// ===== TEXTURES =====
+function createCanvasTexture(width, height, drawFn) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  drawFn(ctx, width, height);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+const wallTex = createCanvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#F5F0E8';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 500; i++) {
+    ctx.fillStyle = `rgba(${200+Math.random()*55},${190+Math.random()*55},${180+Math.random()*55},0.3)`;
+    ctx.fillRect(Math.random()*w, Math.random()*h, 2, 2);
+  }
+});
+
+const woodFloorTex = createCanvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#8B6914';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 8; i++) {
+    const y = i * 32;
+    ctx.fillStyle = i % 2 === 0 ? '#7A5C12' : '#9B7924';
+    ctx.fillRect(0, y, w, 30);
+    ctx.strokeStyle = '#5A4010';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, y, w, 30);
+  }
+});
+woodFloorTex.repeat.set(4, 4);
+
+const tileTex = createCanvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#E8E8E8';
+  ctx.fillRect(0, 0, w, h);
+  const tileSize = 32;
+  for (let x = 0; x < w; x += tileSize) {
+    for (let y = 0; y < h; y += tileSize) {
+      ctx.fillStyle = (Math.floor(x/tileSize) + Math.floor(y/tileSize)) % 2 === 0 ? '#F0F0F0' : '#D8D8D8';
+      ctx.fillRect(x+1, y+1, tileSize-2, tileSize-2);
+    }
+  }
+});
+
+const brickTex = createCanvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(0, 0, w, h);
+  const bw = 64, bh = 32;
+  for (let row = 0; row < h/bh; row++) {
+    const offset = row % 2 === 0 ? 0 : bw/2;
+    for (let col = -1; col < w/bw + 1; col++) {
+      const x = col * bw + offset;
+      const r = 140 + Math.random()*40;
+      const g = 60 + Math.random()*30;
+      const b = 20 + Math.random()*20;
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x+2, row*bh+2, bw-4, bh-4);
+    }
+  }
+});
+
+const carpetTex = createCanvasTexture(256, 256, (ctx, w, h) => {
+  ctx.fillStyle = '#4A2040';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2000; i++) {
+    ctx.fillStyle = `rgba(${60+Math.random()*40},${20+Math.random()*30},${50+Math.random()*40},0.5)`;
+    ctx.fillRect(Math.random()*w, Math.random()*h, 1, 3);
+  }
+});
+
+// ===== MATERIALS =====
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 });
+const floorMat = new THREE.MeshStandardMaterial({ map: woodFloorTex, roughness: 0.7 });
+const tileMat = new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.5 });
+const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.8 });
+const carpetMat = new THREE.MeshStandardMaterial({ map: carpetTex, roughness: 1.0 });
+const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xFAF8F0, roughness: 0.9 });
+const concreteMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x5C3A1E, roughness: 0.5 });
+const fabricMat = new THREE.MeshStandardMaterial({ color: 0x3355AA, roughness: 0.9 });
+const whiteMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.8 });
+const blackMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+
+// ===== COLLISION =====
+const colliders = [];
+function addCollider(mesh) {
+  const box = new THREE.Box3().setFromObject(mesh);
+  colliders.push(box);
+}
+
+function checkCollision(pos, radius) {
+  const playerBox = new THREE.Box3(
+    new THREE.Vector3(pos.x - radius, pos.y - 1.7, pos.z - radius),
+    new THREE.Vector3(pos.x + radius, pos.y + 0.1, pos.z + radius)
+  );
+  for (const box of colliders) {
+    if (playerBox.intersectsBox(box)) return true;
+  }
+  return false;
+}
+
+// ===== BUILDING SETUP =====
+const FLOOR_H = 4;
+const WALL_THICK = 0.3;
+const BUILD_W = 24;
+const BUILD_D = 16;
+const FLOORS = 3;
+
+function createBox(w, h, d, mat, x, y, z) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+function createWall(w, h, d, mat, x, y, z) {
+  const mesh = createBox(w, h, d, mat, x, y, z);
+  addCollider(mesh);
+  return mesh;
+}
+
+// Ground & Foundation
+createBox(BUILD_W + 1, 0.5, BUILD_D + 1, concreteMat, 0, -0.25, 0);
+const groundGeo = new THREE.PlaneGeometry(200, 200);
+const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: 0x3A7D3A, roughness: 0.9 }));
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.01;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Floors & Ceilings
+for (let f = 0; f < FLOORS; f++) {
+  const baseY = f * FLOOR_H;
+  createBox(BUILD_W, 0.2, BUILD_D, f === 0 ? tileMat : (f === 1 ? floorMat : carpetMat), 0, baseY + 0.1, 0);
+  if (f < FLOORS - 1) createBox(BUILD_W, 0.15, BUILD_D, ceilingMat, 0, baseY + FLOOR_H - 0.075, 0);
+}
+
+// Exterior Walls
+for (let f = 0; f < FLOORS; f++) {
+  const baseY = f * FLOOR_H + FLOOR_H/2;
+  createWall(BUILD_W - 12, FLOOR_H, WALL_THICK, brickMat, 0, baseY, -BUILD_D/2 + 0.01);
+  createWall(6, FLOOR_H, WALL_THICK, brickMat, -BUILD_W/2 + 3, baseY, -BUILD_D/2);
+  createWall(6, FLOOR_H, WALL_THICK, brickMat, BUILD_W/2 - 3, baseY, -BUILD_D/2);
+  createWall(BUILD_W, FLOOR_H, WALL_THICK, brickMat, 0, baseY, BUILD_D/2);
+  createWall(WALL_THICK, FLOOR_H, BUILD_D, brickMat, -BUILD_W/2, baseY, 0);
+  createWall(WALL_THICK, FLOOR_H, BUILD_D, brickMat, BUILD_W/2, baseY, 0);
+}
+
+// Interior Walls
+const f1Y = FLOOR_H/2;
+createWall(8, FLOOR_H, WALL_THICK, wallMat, -BUILD_W/2 + 4, f1Y, 0);
+createWall(6, FLOOR_H, WALL_THICK, wallMat, BUILD_W/2 - 3, f1Y, 0);
+createWall(WALL_THICK, FLOOR_H, 6, wallMat, -4, f1Y, -BUILD_D/4);
+createWall(WALL_THICK, FLOOR_H, 6, wallMat, -4, f1Y, BUILD_D/4);
+createWall(WALL_THICK, FLOOR_H, 6, wallMat, 4, f1Y, BUILD_D/4);
+
+// Stairs
+const stairX = 10;
+const stairZ = -2;
+const numSteps = 16;
+for (let f = 0; f < 2; f++) {
+  const baseY = f * FLOOR_H;
+  for (let i = 0; i < numSteps; i++) {
+    const stepH = FLOOR_H / numSteps;
+    const stepD = 5;
+    createBox(2, stepH, stepD, concreteMat,
+      stairX, baseY + 0.2 + stepH/2 + i * stepH, stairZ - 2.5 + 0.5 + i * stepD);
+  }
+}
+
+// Furniture
+createBox(4, 1.1, 1, darkWoodMat, 0, 0.75, -5);
+createBox(0.8, 0.5, 0.05, blackMat, -0.5, 1.6, -5);
+createBox(2, 0.5, 2.5, darkWoodMat, -9, 0.45, -5);
+createBox(1.8, 0.3, 2.3, whiteMat, -9, 0.7, -5);
+createBox(2.3, 0.5, 1, fabricMat, 8, 0.45, -5);
+createBox(3, 0.5, 1, fabricMat, -8, 0.45, -5);
+createBox(2, 2.5, 0.5, darkWoodMat, -10.5, 1.45, 6);
+createBox(2, 1.2, 0.1, blackMat, 8, 1.8, 7.5);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0x404050, 0.5);
+scene.add(ambient);
+const hemi = new THREE.HemisphereLight(0x87CEEB, 0x3A7D3A, 0.4);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xFFFFDD, 1.0);
+sun.position.set(20, 30, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 1024;
+sun.shadow.mapSize.height = 1024;
+scene.add(sun);
+
+function addCeilingLight(x, y, z) {
+  const light = new THREE.PointLight(0xFFEECC, 0.8, 12);
+  light.position.set(x, y, z);
+  scene.add(light);
+}
+
+addCeilingLight(-8, FLOOR_H - 0.3, -5);
+addCeilingLight(0, FLOOR_H - 0.3, -5);
+addCeilingLight(8, FLOOR_H - 0.3, -5);
+addCeilingLight(-8, 2*FLOOR_H - 0.3, -5);
+addCeilingLight(0, 2*FLOOR_H - 0.3, -5);
+addCeilingLight(8, 2*FLOOR_H - 0.3, -5);
+
+// ===== CONTROLS =====
+const pauseBtn = document.getElementById('pause-btn');
+const crosshair = document.getElementById('crosshair');
+const floorIndicator = document.getElementById('floor-indicator');
+const minimapContainer = document.getElementById('minimap-container');
+const jumpBtn = document.getElementById('jump-btn');
+const runBtn = document.getElementById('run-btn');
+const orientationWarning = document.getElementById('orientation-warning');
+
+const velocity = new THREE.Vector3();
+let canJump = true;
+const PLAYER_RADIUS = 0.4;
+const PLAYER_HEIGHT = 1.7;
+
+const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+const PI_2 = Math.PI / 2;
+
+window.addEventListener('resize', handleResize);
+
+function handleResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  
+  const isPortrait = window.innerHeight > window.innerWidth;
+  if (isPortrait) {
+    orientationWarning.classList.remove('hidden');
+  } else {
+    orientationWarning.classList.add('hidden');
+  }
+}
+
+handleResize();
+
+// Pause button
+pauseBtn.addEventListener('click', () => {
+  isPaused = !isPaused;
+  if (isPaused) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    `;
+    overlay.innerHTML = '<div style="color: #fff; font-size: 24px;">⏸️ Игра пауза<br><br>Кликните чтобы продолжить</div>';
+    document.body.appendChild(overlay);
+    
+    overlay.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      isPaused = false;
+    });
+    orientationWarning.classList.remove('hidden');
+  } else {
+    const overlay = document.querySelector('div[onclick*="remove"]');
+    if (overlay) {
+      document.body.removeChild(overlay);
+      overlay.remove();
+    }
+  }
+});
+
+// ===== TOUCH CONTROLS =====
+const moveStick = document.querySelector('#joystick-move-left .joystick-stick');
+const lookStick = document.querySelector('#joystick-look-right .joystick-stick');
+const moveBase = document.querySelector('#joystick-move-left .joystick-base');
+const lookBase = document.querySelector('#joystick-look-right .joystick-base');
+const lookZone = document.getElementById('look-zone-right');
+
+let moveTouchId = null;
+let lookTouchId = null;
+let moveCenter = { x: 0, y: 0 };
+let lookCenter = { x: 0, y: 0 };
+
+// Move Joystick
+moveBase.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const touch = e.touches[0];
+  moveTouchId = touch.identifier;
+  
+  const rect = moveBase.getBoundingClientRect();
+  moveCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  
+  let dx = touch.clientX - moveCenter.x;
+  let dy = touch.clientY - moveCenter.y;
+  
+  const distance = Math.sqrt(dx*dx + dy*dy);
+  if (distance > JOYSTICK_MAX_RADIUS) {
+    dx = (dx / distance) * JOYSTICK_MAX_RADIUS;
+    dy = (dy / distance) * JOYSTICK_MAX_RADIUS;
+  }
+  
+  moveStick.style.transform = `translate(calc(${dx}px - 50%), calc(${dy}px - 50%))`;
+  moveDirection.x = -dx / JOYSTICK_MAX_RADIUS;
+  moveDirection.y = -dy / JOYSTICK_MAX_RADIUS;
+});
+
+moveBase.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  for (let i = 0; i < e.touches.length; i++) {
+    if (e.touches[i].identifier === moveTouchId) {
+      const touch = e.touches[i];
+      let dx = touch.clientX - moveCenter.x;
+      let dy = touch.clientY - moveCenter.y;
+      
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      if (distance > JOYSTICK_MAX_RADIUS) {
+        dx = (dx / distance) * JOYSTICK_MAX_RADIUS;
+        dy = (dy / distance) * JOYSTICK_MAX_RADIUS;
+      }
+      
+      moveStick.style.transform = `translate(calc(${dx}px - 50%), calc(${dy}px - 50%))`;
+      moveDirection.x = -dx / JOYSTICK_MAX_RADIUS;
+      moveDirection.y = -dy / JOYSTICK_MAX_RADIUS;
+      break;
+    }
+  }
+});
+
+moveBase.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === moveTouchId) {
+      moveTouchId = null;
+      moveDirection.set(0, 0);
+      moveStick.style.transform = 'translate(calc(-50%), calc(-50%))';
+      break;
+    }
+  }
+});
+
+// Look Joystick
+lookBase.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const touch = e.touches[0];
+  lookTouchId = touch.identifier;
+  
+  const rect = lookBase.getBoundingClientRect();
+  lookCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  
+  let dx = touch.clientX - lookCenter.x;
+  let dy = touch.clientY - lookCenter.y;
+  
+  const distance = Math.sqrt(dx*dx + dy*dy);
+  if (distance > JOYSTICK_MAX_RADIUS) {
+    dx = (dx / distance) * JOYSTICK_MAX_RADIUS;
+    dy = (dy / distance) * JOYSTICK_MAX_RADIUS;
+  }
+  
+  lookStick.style.transform = `translate(calc(${dx}px - 50%), calc(${dy}px - 50%))`;
+  
+  // Apply rotation
+  euler.setFromQuaternion(camera.quaternion);
+  euler.y -= (dx / JOYSTICK_MAX_RADIUS) * 2;
+  euler.x -= (dy / JOYSTICK_MAX_RADIUS) * 2;
+  euler.x = Math.max(-PI_2, Math.min(PI_2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+});
+
+lookBase.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  for (let i = 0; i < e.touches.length; i++) {
+    if (e.touches[i].identifier === lookTouchId) {
+      const touch = e.touches[i];
+      let dx = touch.clientX - lookCenter.x;
+      let dy = touch.clientY - lookCenter.y;
+      
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      if (distance > JOYSTICK_MAX_RADIUS) {
+        dx = (dx / distance) * JOYSTICK_MAX_RADIUS;
+        dy = (dy / distance) * JOYSTICK_MAX_RADIUS;
+      }
+      
+      lookStick.style.transform = `translate(calc(${dx}px - 50%), calc(${dy}px - 50%))`;
+      
+      euler.setFromQuaternion(camera.quaternion);
+      euler.y -= (dx / JOYSTICK_MAX_RADIUS) * 2;
+      euler.x -= (dy / JOYSTICK_MAX_RADIUS) * 2;
+      euler.x = Math.max(-PI_2, Math.min(PI_2, euler.x));
+      camera.quaternion.setFromEuler(euler);
+      break;
+    }
+  }
+});
+
+lookBase.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === lookTouchId) {
+      lookTouchId = null;
+      lookStick.style.transform = 'translate(calc(-50%), calc(-50%))';
+      break;
+    }
+  }
+});
+
+// Swipe Zone for Quick Look
+lookZone.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  lastLookX = touch.clientX;
+  lastLookY = touch.clientY;
+  lookActive = true;
+}, { passive: false });
+
+lookZone.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (!lookActive) return;
+  
+  const touch = e.touches[0];
+  const deltaX = touch.clientX - lastLookX;
+  const deltaY = touch.clientY - lastLookY;
+  
+  lastLookX = touch.clientX;
+  lastLookY = touch.clientY;
+  
+  euler.setFromQuaternion(camera.quaternion);
+  euler.y -= deltaX * LOOK_SENSITIVITY;
+  euler.x -= deltaY * LOOK_SENSITIVITY;
+  euler.x = Math.max(-PI_2, Math.min(PI_2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+}, { passive: false });
+
+lookZone.addEventListener('touchend', () => {
+  lookActive = false;
+});
+
+// Jump Button
+jumpBtn.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (canJump && !isPaused) {
+    velocity.y = 7;
+    canJump = false;
+  }
+  jumpBtn.style.transform = 'scale(0.9)';
+  setTimeout(() => { jumpBtn.style.transform = 'scale(1)'; }, 100);
+}, { passive: false });
+
+// Run Button
+runBtn.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  isRunning = !isRunning;
+  runBtn.classList.toggle('active', isRunning);
+  runBtn.classList.toggle('inactive', !isRunning);
+}, { passive: false });
+
+// ===== MINIMAP =====
+const minimapCanvas = document.createElement('canvas');
+minimapCanvas.id = 'minimap';
+minimapContainer.appendChild(minimapCanvas);
+const minimapCtx = minimapCanvas.getContext('2d');
+minimapCanvas.width = 120;
+minimapCanvas.height = 120;
+
+function drawMinimap() {
+  const ctx = minimapCtx;
+  const w = 120, h = 120;
+  const scale = w / (BUILD_W + 4);
+  
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, w, h);
+  
+  ctx.strokeStyle = '#6cf';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(
+    w/2 - BUILD_W/2 * scale, 
+    h/2 - BUILD_D/2 * scale, 
+    BUILD_W * scale, 
+    BUILD_D * scale
+  );
+  
+  const px = w/2 + camera.position.x * scale;
+  const py = h/2 + camera.position.z * scale;
+  
+  const dir = new THREE.Vector3(0, 0, -1);
+  dir.applyQuaternion(camera.quaternion);
+  
+  ctx.fillStyle = '#ff4444';
+  ctx.beginPath();
+  ctx.arc(px, py, 4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.strokeStyle = '#ff4444';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + dir.x * 12, py + dir.z * 12);
+  ctx.stroke();
+  
+  ctx.fillStyle = '#6cf';
+  ctx.font = 'bold 10px Arial';
+  ctx.fillText(`Этаж: ${getCurrentFloor()}`, 5, 12);
+}
+
+function getCurrentFloor() {
+  const y = camera.position.y;
+  if (y < FLOOR_H) return 1;
+  if (y < 2 * FLOOR_H) return 2;
+  return 3;
+}
+
+// ===== GAME LOOP =====
+const clock = new THREE.Clock();
+const direction = new THREE.Vector3();
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+
+gameStarted = true;
+orientationWarning.classList.add('hidden');
+
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = Math.min(clock.getDelta(), 0.1);
+  
+  if (gameStarted && !isPaused) {
+    const currentSpeed = isRunning ? RUN_SPEED : BASE_SPEED;
+    
+    direction.set(0, 0, 0);
+    
+    forward.copy(new THREE.Vector3(0, 0, -1)).applyQuaternion(camera.quaternion).normalize();
+    forward.y = 0;
+    
+    right.copy(new THREE.Vector3(1, 0, 0)).applyQuaternion(camera.quaternion).normalize();
+    right.y = 0;
+    
+    if (moveDirection.y < -0.1) direction.add(forward);
+    if (moveDirection.y > 0.1) direction.sub(forward);
+    if (moveDirection.x > 0.1) direction.add(right);
+    if (moveDirection.x < -0.1) direction.sub(right);
+    
+    if (direction.length() > 0.1) direction.normalize();
+    
+    velocity.x = direction.x * currentSpeed * delta;
+    velocity.z = direction.z * currentSpeed * delta;
+    
+    velocity.y -= 20 * delta;
+    
+    let testPos = camera.position.clone();
+    testPos.x += velocity.x;
+    if (!checkCollision(testPos, PLAYER_RADIUS)) camera.position.x = testPos.x;
+    
+    testPos = camera.position.clone();
+    testPos.z += velocity.z;
+    if (!checkCollision(testPos, PLAYER_RADIUS)) camera.position.z = testPos.z;
+    
+    camera.position.y += velocity.y * delta;
+    
+    const currentFloorY = Math.floor((camera.position.y - 0.2) / FLOOR_H) * FLOOR_H;
+    const floorTop = currentFloorY + 0.2;
+    
+    if (camera.position.y < floorTop + PLAYER_HEIGHT && velocity.y < 0) {
+      camera.position.y = floorTop + PLAYER_HEIGHT;
+      velocity.y = 0;
+      canJump = true;
+    }
+    
+    if (camera.position.y < PLAYER_HEIGHT) {
+      camera.position.y = PLAYER_HEIGHT;
+      velocity.y = 0;
+      canJump = true;
+    }
+    
+    const margin = 1;
+    camera.position.x = Math.max(-BUILD_W/2 + margin, Math.min(BUILD_W/2 - margin, camera.position.x));
+    camera.position.z = Math.max(-BUILD_D/2 + margin, Math.min(BUILD_D/2 - margin, camera.position.z));
+    
+    floorIndicator.textContent = `Этаж: ${getCurrentFloor()}`;
+  }
+  
+  drawMinimap();
+  renderer.render(scene, camera);
+}
+
+animate();
+
+window.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('orientationchange', handleResize);
+</script>
+</body>
+</html>
